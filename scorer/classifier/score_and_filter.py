@@ -4,6 +4,7 @@ import json
 import sys
 from time import sleep
 from concurrent.futures import ThreadPoolExecutor
+from tqdm import tqdm
 
 from grampy.text import AnnotatedText, AnnotatedTokens
 
@@ -44,8 +45,8 @@ def main(args):
     # run sentences through OPC if it needed
     if args.opc:
         with ThreadPoolExecutor(args.n_threads) as pool:
-            opc_out = pool.map(wrap_opc, sentences)
-        opc_out = [x for x in opc_out]
+            opc_out = list(tqdm(pool.map(wrap_opc, sentences),
+                                total=len(sentences)))
         out_file = args.output_file.replace(".txt", f"_opc.txt")
         write_lines(out_file, opc_out)
     else:
@@ -55,8 +56,8 @@ def main(args):
     # run system through confidence scorer
     combined = [(x, args.server_path) for x in opc_out]
     with ThreadPoolExecutor(args.n_threads) as pool:
-        scorer_out = pool.map(wrap_confidence_scorer, combined)
-    scorer_out = [x for x in scorer_out]
+        scorer_out = list(tqdm(pool.map(wrap_confidence_scorer, combined),
+                               total=len(combined)))
     out_file = args.output_file.replace(".txt", f"_scored.txt")
     write_lines(out_file, scorer_out)
     print("Scores were got")
