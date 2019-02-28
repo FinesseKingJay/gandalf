@@ -2,9 +2,9 @@ import argparse
 import requests
 import json
 import sys
+from time import sleep
 from concurrent.futures import ThreadPoolExecutor
 
-from grampy.api import opc_check
 from grampy.text import AnnotatedText, AnnotatedTokens
 
 from scorer.helpers.utils import read_lines, write_lines
@@ -24,7 +24,16 @@ def get_confidence_score(batch, addr):
 
 def wrap_confidence_scorer(combined):
     sent, addr = combined
-    processed_sent = get_confidence_score([sent], addr)[0]
+    if not sent:
+        return sent
+    processed_sent = ""
+    while not processed_sent:
+        try:
+            processed_sent = get_confidence_score([sent], addr)[0]
+        except Exception as e:
+            print(f"Something went wrong with confidence scoring. "
+                  f"Exception which was raised {e}. Sleep for 5 sec")
+            sleep(5)
     return processed_sent
 
 
