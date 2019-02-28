@@ -59,7 +59,7 @@ def handle_batch(clf, scaler, selector, error_types, batch):
     else:
         system_type = "OPC"
         texts = batch
-    records, ann_sents_dict = preprocess_batch(texts, system_type)
+    records, ann_sents_dict = preprocess_batch(texts, error_types, system_type)
     scores = make_predictions(clf, scaler, selector, records)
     output_batch = postprocess_sents(ann_sents_dict, scores)
     return output_batch
