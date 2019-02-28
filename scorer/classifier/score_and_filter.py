@@ -54,7 +54,7 @@ def main(args):
 
     # run system through confidence scorer
     combined = [(x, args.server_path) for x in opc_out]
-    with ThreadPoolExecutor(args.n_treads) as pool:
+    with ThreadPoolExecutor(args.n_threads) as pool:
         scorer_out = pool.map(wrap_confidence_scorer, combined)
     scorer_out = [x for x in scorer_out]
     out_file = args.output_file.replace(".txt", f"_scored.txt")
