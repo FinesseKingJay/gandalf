@@ -80,7 +80,7 @@ def main(args):
                 if error_types is not None and et not in error_types:
                     ann_sent.remove(ann)
                     continue
-                score = ann.meta['confidence']
+                score = float(ann.meta['confidence'])
                 if score < t:
                     ann_sent.remove(ann)
             t_out.append(ann_sent.get_annotated_text())
