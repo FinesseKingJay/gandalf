@@ -39,7 +39,7 @@ def wrap_confidence_scorer(combined):
 
 def main(args):
     # load sentences from input file
-    sentences = read_lines(args.input_data)
+    sentences = read_lines(args.input_file)
 
     # run sentences through OPC if it needed
     if args.opc:
