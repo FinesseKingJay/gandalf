@@ -8,12 +8,12 @@ from grampy.text import AnnotatedText, AnnotatedTokens
 
 from scorer.classifier.classifier import load_models, get_all_indep_features, \
     get_clf_pred_probs, add_new_features
-from scorer.classifier.get_features import get_features
+from scorer.classifier.get_features import get_features, get_normalized_error_type
 
 app = Flask(__name__)
 
 
-def preprocess_batch(batch, system_type):
+def preprocess_batch(batch, error_types, system_type):
     records = []
     ann_sents_dict = {}
     for i, sent in enumerate(batch):
@@ -21,6 +21,9 @@ def preprocess_batch(batch, system_type):
         ann_sents_dict[i] = ann_sent
         for ann in ann_sent.iter_annotations():
             ann.meta["system_type"] = system_type
+            et = get_normalized_error_type(ann)
+            if error_types is not None and et not in error_types:
+                continue
             records.append([ann_sent, ann, (i, ann.start, ann.end)])
     return records, ann_sents_dict
 
@@ -49,7 +52,7 @@ def postprocess_sents(ann_sents_dict, scores):
     return output_batch
 
 
-def handle_batch(clf, scaler, selector, batch):
+def handle_batch(clf, scaler, selector, error_types, batch):
     if isinstance(batch, dict) and 'system_type' in batch.keys():
         system_type = batch.get('system_type')
         texts = batch.get('texts')
@@ -69,7 +72,7 @@ def process_request():
         return json.dumps(batch)
     else:
         try:
-            response = handle_batch(clf, scaler, selector, batch)
+            response = handle_batch(clf, scaler, selector, error_types, batch)
             response = json.dumps(response)
             return response
         except Exception as ex:
@@ -86,7 +89,14 @@ if __name__ == '__main__':
     parser.add_argument('--port',
                         type=int,
                         default=8081)
+    parser.add_argument('--error_types',
+                        help='Set if you want to score only some error types.',
+                        default=None)
     args = parser.parse_args()
     clf, scaler, selector = load_models(args.model_path)
+    if args.error_types is None:
+        error_types = None
+    else:
+        error_types = args.error_types.split()
     print("Server is running")
     waitress.serve(app, port=args.port, host="0.0.0.0")
