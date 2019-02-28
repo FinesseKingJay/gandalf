@@ -8,7 +8,8 @@ from grampy.api import opc_check
 from grampy.text import AnnotatedText, AnnotatedTokens
 
 from scorer.helpers.utils import read_lines, write_lines
-from scorer.classifier.get_features import get_protected_response
+from scorer.classifier.get_features import get_protected_response, \
+    get_normalized_error_type
 
 
 def wrap_opc(sent):
@@ -48,21 +49,28 @@ def main(args):
     scorer_out = [x for x in scorer_out]
     out_file = args.output_file.replace(".txt", f"_scored.txt")
     write_lines(out_file, scorer_out)
-    
+
     # apply thresholds
     thresholds = [0, 0.3, 0.5, 0.7]
+    if args.error_types is not None:
+        error_types = args.error_types.split()
+    else:
+        error_types = None
     for t in thresholds:
         t_out = []
         for sent in scorer_out:
             ann_sent = AnnotatedTokens(AnnotatedText(sent))
             for ann in ann_sent.iter_annotations():
+                et = get_normalized_error_type(ann)
+                if error_types is not None and et not in error_types:
+                    ann_sent.remove(ann)
+                    continue
                 score = ann.meta['confidence']
                 if score < t:
                     ann_sent.remove(ann)
             t_out.append(ann_sent.get_annotated_text())
         out_file = args.output_file.replace(".txt", f"_above_{t}.txt")
         write_lines(out_file, t_out)
-
 
 
 if __name__ == "__main__":
@@ -79,7 +87,17 @@ if __name__ == "__main__":
                         # default="http://0.0.0.0:8081/process"
                         default="http://opc-scorer.phantasm.gnlp.io:8081/process"
                         )
-
+    parser.add_argument('--opc',
+                        action='store_true',
+                        help='If set then data should be run through opc',
+                        default=False)
+    parser.add_argument('--error_types',
+                        help='Set if you want to filter errors by types.',
+                        default=None)
+    parser.add_argument('--n_threads',
+                        help='Specify how many threads you want to use.',
+                        type=int,
+                        default=100)
     args = parser.parse_args()
     code = main(args)
     sys.exit(code)
