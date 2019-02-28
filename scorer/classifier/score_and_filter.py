@@ -50,6 +50,7 @@ def main(args):
         write_lines(out_file, opc_out)
     else:
         opc_out = sentences
+    print("OPC data was got")
 
     # run system through confidence scorer
     combined = [(x, args.server_path) for x in opc_out]
@@ -58,6 +59,7 @@ def main(args):
     scorer_out = [x for x in scorer_out]
     out_file = args.output_file.replace(".txt", f"_scored.txt")
     write_lines(out_file, scorer_out)
+    print("Scores were got")
 
     # apply thresholds
     thresholds = [0, 0.3, 0.5, 0.7]
