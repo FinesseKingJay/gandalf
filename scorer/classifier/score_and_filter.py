@@ -76,6 +76,7 @@ def main(args):
         for sent in scorer_out:
             ann_sent = AnnotatedTokens(AnnotatedText(sent))
             for ann in ann_sent.iter_annotations():
+                ann.meta['system_type'] = "OPC"
                 et = get_normalized_error_type(ann)
                 if error_types is not None and et not in error_types:
                     ann_sent.remove(ann)
