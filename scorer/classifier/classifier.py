@@ -542,6 +542,8 @@ def balance_by_error_types(features, labels, error_types):
     tmp = list(zip(all_features, all_labels))
     shuffle(tmp)
     all_features, all_labels = zip(*tmp)
+    all_features = np.array(all_features)
+    all_labels = np.array(all_labels)
     print(f"Total size of records {len(all_features)}")
     return all_features, all_labels
 
