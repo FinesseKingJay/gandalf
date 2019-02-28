@@ -54,12 +54,15 @@ def main(args):
     print("OPC data was got")
 
     # run system through confidence scorer
-    combined = [(x, args.server_path) for x in opc_out]
-    with ThreadPoolExecutor(args.n_threads) as pool:
-        scorer_out = list(tqdm(pool.map(wrap_confidence_scorer, combined),
-                               total=len(combined)))
-    out_file = args.output_file.replace(".txt", f"_scored.txt")
-    write_lines(out_file, scorer_out)
+    if args.score:
+        combined = [(x, args.server_path) for x in opc_out]
+        with ThreadPoolExecutor(args.n_threads) as pool:
+            scorer_out = list(tqdm(pool.map(wrap_confidence_scorer, combined),
+                                   total=len(combined)))
+        out_file = args.output_file.replace(".txt", f"_scored.txt")
+        write_lines(out_file, scorer_out)
+    else:
+        scorer_out = opc_out
     print("Scores were got")
 
     # apply thresholds
@@ -102,6 +105,10 @@ if __name__ == "__main__":
     parser.add_argument('--opc',
                         action='store_true',
                         help='If set then data should be run through opc',
+                        default=False)
+    parser.add_argument('--score',
+                        action='store_true',
+                        help='If set then data should be run through scorer',
                         default=False)
     parser.add_argument('--error_types',
                         help='Set if you want to filter errors by types.',

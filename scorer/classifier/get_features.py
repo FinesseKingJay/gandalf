@@ -576,7 +576,10 @@ def main(args):
     gold_sentences = read_lines(args.gold_file)
     out_file = args.gold_file.replace(".txt", "_with_features.txt")
     et = args.error_type
-    st = args.system_type.split()
+    if args.system_type is not None:
+        st = args.system_type.split()
+    else:
+        st = None
     for i in tqdm(range(int(len(gold_sentences)/args.chunk_size) + 1)):
         chunk = [[x, et, st] for x in gold_sentences[i*args.chunk_size: (i+1)*args.chunk_size]]
         if not chunk:
