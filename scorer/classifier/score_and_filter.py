@@ -47,6 +47,7 @@ def main(args):
         with ThreadPoolExecutor(args.n_threads) as pool:
             opc_out = list(tqdm(pool.map(wrap_opc, sentences),
                                 total=len(sentences)))
+        opc_out = [x.get_annotated_text() for x in opc_out]
         out_file = args.output_file.replace(".txt", f"_opc.txt")
         write_lines(out_file, opc_out)
     else:
