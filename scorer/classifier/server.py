@@ -52,12 +52,11 @@ def postprocess_sents(ann_sents_dict, scores):
     return output_batch
 
 
-def handle_batch(clf, scaler, selector, error_types, batch):
+def handle_batch(clf, scaler, selector, error_types, system_type, batch):
     if isinstance(batch, dict) and 'system_type' in batch.keys():
         system_type = batch.get('system_type')
         texts = batch.get('texts')
     else:
-        system_type = "OPC"
         texts = batch
     records, ann_sents_dict = preprocess_batch(texts, error_types, system_type)
     scores = make_predictions(clf, scaler, selector, records)
@@ -72,7 +71,8 @@ def process_request():
         return json.dumps(batch)
     else:
         try:
-            response = handle_batch(clf, scaler, selector, error_types, batch)
+            response = handle_batch(clf, scaler, selector, error_types,
+                                    system_type, batch)
             response = json.dumps(response)
             return response
         except Exception as ex:
@@ -92,11 +92,16 @@ if __name__ == '__main__':
     parser.add_argument('--error_types',
                         help='Set if you want to score only some error types.',
                         default=None)
+    parser.add_argument('--system_type',
+                        help='Set if you want to collect features only from '
+                             'one system.',
+                        default="OPC")
     args = parser.parse_args()
     clf, scaler, selector = load_models(args.model_path)
     if args.error_types is None:
         error_types = None
     else:
         error_types = args.error_types.split()
+    system_type = args.system_type
     print("Server is running")
     waitress.serve(app, port=args.port, host="0.0.0.0")
