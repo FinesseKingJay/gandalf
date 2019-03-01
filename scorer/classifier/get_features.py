@@ -513,6 +513,7 @@ def get_protected_response(sent, system_type, error_type):
         except Exception as e:
             print(e)
             print(sent)
+            print(system_type)
             print("Something went wrong. Sleep for 5 sec.")
             sleep(5)
     return response

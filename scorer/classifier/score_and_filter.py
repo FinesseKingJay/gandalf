@@ -60,7 +60,6 @@ def main(args):
     else:
         opc_out = sentences
 
-
     # run sentences through OPC if it needed
     if args.opc:
         with ThreadPoolExecutor(args.n_threads) as pool:
