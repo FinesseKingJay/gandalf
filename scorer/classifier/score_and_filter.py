@@ -56,8 +56,7 @@ def main(args):
         opc_out = [x.get_annotated_text() for x in opc_out]
         out_file = args.output_file.replace(".txt", f"_opc_filtered.txt")
         write_lines(out_file, opc_out)
-        print("OPC data was got")
-        exit()
+        print("OPC-filtered data was got")
     else:
         opc_out = sentences
 
@@ -103,7 +102,7 @@ def main(args):
                 if error_types is not None and et not in error_types:
                     ann_sent.remove(ann)
                     continue
-                score = float(ann.meta['confidence'])
+                score = float(ann.meta.get('confidence', 1))
                 if score < t:
                     ann_sent.remove(ann)
             t_out.append(ann_sent.get_annotated_text())
