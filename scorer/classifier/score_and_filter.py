@@ -14,7 +14,13 @@ from scorer.classifier.get_features import get_protected_response, \
 
 
 def wrap_opc(sent):
-    return get_protected_response(sent, system_type="OPC", error_type=None)
+    return get_protected_response(sent, system_type="OPC",
+                                  error_type=None)
+
+
+def wrap_opc_filtered(sent):
+    return get_protected_response(sent, system_type="OPC-filtered",
+                                  error_type=None)
 
 
 def get_confidence_score(batch, addr):
@@ -42,6 +48,20 @@ def main(args):
     # load sentences from input file
     sentences = read_lines(args.input_file)
 
+    # run through opc-filtered
+    if args.opc_filtered:
+        with ThreadPoolExecutor(args.n_threads) as pool:
+            opc_out = list(tqdm(pool.map(wrap_opc_filtered, sentences),
+                                total=len(sentences)))
+        opc_out = [x.get_annotated_text() for x in opc_out]
+        out_file = args.output_file.replace(".txt", f"_opc_filtered.txt")
+        write_lines(out_file, opc_out)
+        print("OPC data was got")
+        exit()
+    else:
+        opc_out = sentences
+
+
     # run sentences through OPC if it needed
     if args.opc:
         with ThreadPoolExecutor(args.n_threads) as pool:
@@ -53,6 +73,7 @@ def main(args):
     else:
         opc_out = sentences
     print("OPC data was got")
+
 
     # run system through confidence scorer
     if args.score:
@@ -105,6 +126,10 @@ if __name__ == "__main__":
                         default="http://opc-scorer.phantasm.gnlp.io:8081/process"
                         )
     parser.add_argument('--opc',
+                        action='store_true',
+                        help='If set then data should be run through opc',
+                        default=False)
+    parser.add_argument('--opc-filtered',
                         action='store_true',
                         help='If set then data should be run through opc',
                         default=False)

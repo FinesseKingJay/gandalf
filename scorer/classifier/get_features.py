@@ -474,6 +474,12 @@ def get_system_response(sent, system_type, error_type):
             ann_sent = fix_opc_output(ann_sent)
         except ApiError:
             ann_sent = AnnotatedText(sent)
+    elif system_type == "OPC-filtered":
+        try:
+            ann_sent = opc_check(sent, addr='PREPROD')
+            ann_sent = fix_opc_output(ann_sent)
+        except ApiError:
+            ann_sent = AnnotatedText(sent)
     elif system_type == "UPC":
         # upc_addr = "upc-high-recall-server.phantasm.gnlp.io:8081"
         # ann_sent = upc_check(sent, addr=upc_addr, custom_server=True)
