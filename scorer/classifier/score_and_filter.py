@@ -71,7 +71,7 @@ def get_lines_from_m2_file(m2_file):
 
 
 def main(args):
-    all_files = os.listdir(args.input_dir)
+    all_files = [x for x in os.listdir(args.input_dir) if "tmp" not in x]
     for fname in all_files:
         print(f"Start evaluation {args.system_type} on {fname}")
         if fname.endswith(".txt"):
