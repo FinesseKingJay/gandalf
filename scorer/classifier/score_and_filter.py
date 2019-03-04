@@ -11,15 +11,13 @@ from grampy.text import AnnotatedText, AnnotatedTokens
 from scorer.helpers.utils import read_lines, write_lines
 from scorer.classifier.get_features import get_protected_response, \
     get_normalized_error_type
+from scorer.combine_systems import get_kenlm_scores
+from scorer.step_3_evaluate_scores import evaluate_from_m2_file, remove_file
 
 
-def wrap_opc(sent):
-    return get_protected_response(sent, system_type="OPC",
-                                  error_type=None)
-
-
-def wrap_opc_filtered(sent):
-    return get_protected_response(sent, system_type="OPC-filtered",
+def wrap_check(comb_data):
+    sent, system_type = comb_data
+    return get_protected_response(sent, system_type=system_type,
                                   error_type=None)
 
 
@@ -44,49 +42,63 @@ def wrap_confidence_scorer(combined):
     return processed_sent
 
 
+def wrap_get_lm_scores(sent):
+    ann_sent = ""
+    if not sent:
+        return sent
+    while not ann_sent:
+        try:
+            ann_tokens = AnnotatedTokens(AnnotatedText(sent))
+            for ann in ann_tokens.iter_annotations():
+                scores = get_kenlm_scores(ann_tokens, [ann], add_original=True)
+                confidence = scores[0] - scores[1]
+                ann.meta['confidence'] = confidence
+            ann_sent = ann_tokens.get_annotated_text()
+        except Exception as e:
+            print(f"Something wrong with KenLM. Exception {e}. Sentence {sent}")
+    return ann_sent
+
+
 def main(args):
     # load sentences from input file
     sentences = read_lines(args.input_file)
 
-    # run through opc-filtered
-    if args.opc_filtered:
+    # run through opc
+    if args.system_type is not None:
+        combined = [(x, args.system_type) for x in sentences]
         with ThreadPoolExecutor(args.n_threads) as pool:
-            opc_out = list(tqdm(pool.map(wrap_opc_filtered, sentences),
-                                total=len(sentences)))
-        opc_out = [x.get_annotated_text() for x in opc_out]
-        out_file = args.output_file.replace(".txt", f"_opc_filtered.txt")
-        write_lines(out_file, opc_out)
-        print("OPC-filtered data was got")
+            system_out = list(tqdm(pool.map(wrap_check, combined),
+                                total=len(combined)))
+        system_out = [x.get_annotated_text() for x in system_out]
+        # save file
+        # out_file = args.output_file.replace(".txt", f"_{args.system_type}_out.txt")
+        # write_lines(out_file, system_out)
     else:
-        opc_out = sentences
-
-    # run sentences through OPC if it needed
-    if args.opc:
-        with ThreadPoolExecutor(args.n_threads) as pool:
-            opc_out = list(tqdm(pool.map(wrap_opc, sentences),
-                                total=len(sentences)))
-        opc_out = [x.get_annotated_text() for x in opc_out]
-        out_file = args.output_file.replace(".txt", f"_opc.txt")
-        write_lines(out_file, opc_out)
-    else:
-        opc_out = sentences
-    print("OPC data was got")
-
+        system_out = sentences
+    print("System response was got")
 
     # run system through confidence scorer
-    if args.score:
-        combined = [(x, args.server_path) for x in opc_out]
+    if args.scorer == "CLF":
+        combined = [(x, args.server_path) for x in system_out]
         with ThreadPoolExecutor(args.n_threads) as pool:
             scorer_out = list(tqdm(pool.map(wrap_confidence_scorer, combined),
                                    total=len(combined)))
-        out_file = args.output_file.replace(".txt", f"_scored.txt")
-        write_lines(out_file, scorer_out)
+        # out_file = args.output_file.replace(".txt", f"_{args.system_type}_{args.scorer}.txt")
+        # write_lines(out_file, scorer_out)
+        thresholds = [None, 0.1, 0.2, 0.25, 0.3, 0.5]
+    elif args.scorer == "LM":
+        with ThreadPoolExecutor(args.n_threads) as pool:
+            scorer_out = list(tqdm(pool.map(wrap_get_lm_scores, system_out),
+                                   total=len(combined)))
+        # out_file = args.output_file.replace(".txt", f"_{args.system_type}_{args.scorer}.txt")
+        # write_lines(out_file, scorer_out)
+        thresholds = [None, 0]
     else:
-        scorer_out = opc_out
+        scorer_out = system_out
+        thresholds = [None]
     print("Scores were got")
 
     # apply thresholds
-    thresholds = [0, 0.3, 0.5, 0.7]
     if args.error_types is not None:
         error_types = args.error_types.split()
     else:
@@ -96,45 +108,50 @@ def main(args):
         for sent in scorer_out:
             ann_sent = AnnotatedTokens(AnnotatedText(sent))
             for ann in ann_sent.iter_annotations():
-                ann.meta['system_type'] = "OPC"
+                ann.meta['system_type'] = args.system_type
                 et = get_normalized_error_type(ann)
                 if error_types is not None and et not in error_types:
                     ann_sent.remove(ann)
                     continue
                 score = float(ann.meta.get('confidence', 1))
-                if score < t:
+                if t is not None and score < t:
                     ann_sent.remove(ann)
             t_out.append(ann_sent.get_annotated_text())
-        out_file = args.output_file.replace(".txt", f"_above_{t}.txt")
-        write_lines(out_file, t_out)
+        # out_file = args.input_file.replace(".txt", f"_{args.system_type}_{args.scorer}_above_{t}.txt")
+        # write_lines(out_file, t_out)
+        if args.m2_file:
+            print(f"\nThreshold level is {t}")
+            tmp_filename = args.input_file.replace(".txt", f"_{args.system_type}_{args.scorer}_above_{t}_tmp.txt")
+            evaluate_from_m2_file(args.m2_file, t_out, tmp_filename)
+        elif args.fp_ratio:
+            cnt_errors = sum([len(AnnotatedText(x).get_annotations()) for x in t_out])
+            print(f"\nThe number of errors are equal {cnt_errors}. "
+                  f"FP rate {round(100*cnt_errors/len(t_out),2)}%")
+        # remove_file(out_file)
 
 
 if __name__ == "__main__":
     # read parameters
     parser = argparse.ArgumentParser()
     parser.add_argument('input_file',
-                        help='Path to the input file',
+                        help='Path to the input source file',
                         )
-    parser.add_argument('output_file',
-                        help='Path to the output file',
+    parser.add_argument('--m2_file',
+                        help='Path to the input source file',
                         )
     parser.add_argument('--server_path',
                         help='Path to the server',
                         # default="http://0.0.0.0:8081/process"
                         default="http://opc-scorer.phantasm.gnlp.io:8081/process"
                         )
-    parser.add_argument('--opc',
-                        action='store_true',
-                        help='If set then data should be run through opc',
-                        default=False)
-    parser.add_argument('--opc-filtered',
-                        action='store_true',
-                        help='If set then data should be run through opc',
-                        default=False)
-    parser.add_argument('--score',
-                        action='store_true',
-                        help='If set then data should be run through scorer',
-                        default=False)
+    parser.add_argument('--system_type',
+                        help='Specify which system you want to try',
+                        choices=['OPC', 'OPC-filtered', 'UPC', None],
+                        default=None)
+    parser.add_argument('--scorer',
+                        help='Specify which scorer you want to use',
+                        choices=['CLF', 'LM', None],
+                        default=None)
     parser.add_argument('--error_types',
                         help='Set if you want to filter errors by types.',
                         default=None)

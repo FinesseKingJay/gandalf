@@ -8,12 +8,21 @@ from scorer.helpers.filtering import filter_by_error_type
 from scorer.helpers.error_types_bank import ErrorTypesBank
 
 
-
 def remove_file(filename):
     try:
         os.remove(filename)
     except FileNotFoundError:
         pass
+
+
+def evaluate_from_m2_file(m2_file, sub_lines, tmp_filename):
+    output_corrected = [AnnotatedText(x).get_corrected_text() for x in sub_lines]
+    sub_file_processed = f"o_{os.path.basename(tmp_filename)}"
+    write_lines(sub_file_processed, output_corrected)
+    m2_path = os.path.join(os.getcwd().split("/gandalf/")[0],
+                           "gandalf/scorer/m2scorer/m2scorer")
+    system(f'{m2_path} {sub_file_processed} {m2_file}')
+    remove_file(sub_file_processed)
 
 
 def evaluate_with_m2(gold_annotations, output_annotations, tmp_filename):
@@ -66,12 +75,17 @@ def main(args):
     if args.fp_ratio:
         calculate_fp_ratio(sub_lines)
     else:
-        evaluate_with_m2(gold_lines, sub_lines, tmp_filename)
+        if args.fn_gold.endswith(".m2"):
+            evaluate_from_m2_file(args.fn_gold, sub_lines, tmp_filename)
+            exit()
+        else:
+            evaluate_with_m2(gold_lines, sub_lines, tmp_filename)
     # evaluate on all categories
 
     eb = ErrorTypesBank()
     categories = eb.get_error_types_list("Patterns22")
     categories = ['Agreement', 'Pronoun', 'Punctuation', 'Preposition', 'Determiner', 'VerbSVA']
+    categories = []
     for category in categories:
         print(f"\nEvaluate on {category}")
         gold_filtered, n_errors_in_gold = filter_by_error_type(gold_lines,

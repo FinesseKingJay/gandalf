@@ -308,7 +308,7 @@ def get_normalized_error_type(ann):
         norm_error_type = eb.pname_to_patterns22(pname)
     elif system_type == "UPC":
         norm_error_type = eb.upc5_to_patterns22(ann_error_type)
-    elif system_type == "OPC":
+    elif system_type == "OPC" or system_type == "OPC-filtered":
         norm_error_type = eb.opc_to_patterns22(ann_error_type)
     else:
         print(f"Something went wrong with {ann}")
@@ -463,6 +463,27 @@ def fix_opc_output(ann_sent):
     return ann_sent
 
 
+def get_opc_filters():
+    filters = {}
+    filters["<SentenceLengthLimit(max_len=55, min_len=3)>"] = False
+    filters["<FinishedSentence()>"] = False
+    filters["<RepetitiveInput()>"] = False
+    filters["<NonLatinInput(max_nonlatin_chars=3)>"] = False
+    filters["<ErrorTypesFilter(types=None)>"] = False
+    filters["<ForbidCaseConversion()>"] = False
+    filters["<ForbidNonLatin()>"] = False
+    filters["<SkipNonWords()>"] = False
+    filters["<SkipExceptions(exceptions=['webex', 'autocorrect'])>"] = False
+    filters["<ForbidNumbers()>"] = False
+    filters["<ForbidNonWordSuggestions()>"] = False
+    filters["<ForbidCorrectionPair(case_sensitive=False, directional=False, s1='microeconomics', s2='macroeconomics')>"] = False
+    filters["<ForbidCorrectionPair(case_sensitive=True, directional=True, s1='Facebook', s2='facebook')>"] = False
+    filters["<ForbidCorrectionPairGroup(abbreviations)>"] = False
+    filters["<ForbidCorrectionPairGroup(contractions)>"] = False
+    filters["<LanguageModelFilter(length_norm=True, lm=KenLM)>"] = True
+    return filters
+
+
 def get_system_response(sent, system_type, error_type):
     if system_type == "Patterns":
         ann_sent = check(sent)[0]
@@ -475,8 +496,9 @@ def get_system_response(sent, system_type, error_type):
         except ApiError:
             ann_sent = AnnotatedText(sent)
     elif system_type == "OPC-filtered":
+        filters = get_opc_filters()
         try:
-            ann_sent = opc_check(sent, addr='PREPROD')
+            ann_sent = opc_check(sent, addr='PREPROD', filters=filters)
             ann_sent = fix_opc_output(ann_sent)
         except ApiError:
             ann_sent = AnnotatedText(sent)
