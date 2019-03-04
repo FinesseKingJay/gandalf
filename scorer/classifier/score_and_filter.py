@@ -2,6 +2,8 @@ import argparse
 import requests
 import json
 import sys
+import os
+import random
 from time import sleep
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
@@ -59,85 +61,95 @@ def wrap_get_lm_scores(sent):
     return ann_sent
 
 
+def get_lines_from_m2_file(m2_file):
+    tmp_number = int(random.random()*10**9)
+    tmp_file = m2_file.replace(".m2", f"_tmp_{tmp_number}.txt")
+    os.system(f'cat {m2_file} | grep "^S " | cut -c3- > {tmp_file}')
+    lines = read_lines(tmp_file)
+    remove_file(tmp_file)
+    return lines
+
+
 def main(args):
-    # load sentences from input file
-    sentences = read_lines(args.input_file)
+    all_files = os.listdir(args.input_dir)
+    for fname in all_files:
+        print(f"Start evaluation {args.system_type} on {fname}")
+        if fname.endswith(".txt"):
+            fp_ratio = True
+        elif fname.endswith(".m2"):
+            fp_ratio = False
+        else:
+            continue
+        input_file = os.path.join(args.input_dir, fname)
+        if fp_ratio:
+            sentences = read_lines(input_file)
+        else:
+            sentences = get_lines_from_m2_file(input_file)
 
-    # run through opc
-    if args.system_type is not None:
-        combined = [(x, args.system_type) for x in sentences]
-        with ThreadPoolExecutor(args.n_threads) as pool:
-            system_out = list(tqdm(pool.map(wrap_check, combined),
-                                total=len(combined)))
-        system_out = [x.get_annotated_text() for x in system_out]
-        # save file
-        # out_file = args.output_file.replace(".txt", f"_{args.system_type}_out.txt")
-        # write_lines(out_file, system_out)
-    else:
-        system_out = sentences
-    print("System response was got")
+        # run through system
+        if args.system_type is not None:
+            combined = [(x, args.system_type) for x in sentences]
+            with ThreadPoolExecutor(args.n_threads) as pool:
+                system_out = list(tqdm(pool.map(wrap_check, combined),
+                                    total=len(combined)))
+            system_out = [x.get_annotated_text() for x in system_out]
+        else:
+            system_out = sentences
+        print("System response was got")
 
-    # run system through confidence scorer
-    if args.scorer == "CLF":
-        combined = [(x, args.server_path) for x in system_out]
-        with ThreadPoolExecutor(args.n_threads) as pool:
-            scorer_out = list(tqdm(pool.map(wrap_confidence_scorer, combined),
-                                   total=len(combined)))
-        # out_file = args.output_file.replace(".txt", f"_{args.system_type}_{args.scorer}.txt")
-        # write_lines(out_file, scorer_out)
-        thresholds = [None, 0.1, 0.2, 0.25, 0.3, 0.5]
-    elif args.scorer == "LM":
-        with ThreadPoolExecutor(args.n_threads) as pool:
-            scorer_out = list(tqdm(pool.map(wrap_get_lm_scores, system_out),
-                                   total=len(combined)))
-        # out_file = args.output_file.replace(".txt", f"_{args.system_type}_{args.scorer}.txt")
-        # write_lines(out_file, scorer_out)
-        thresholds = [None, 0]
-    else:
-        scorer_out = system_out
-        thresholds = [None]
-    print("Scores were got")
+        # run system through confidence scorer
+        for scorer in [None, "LM", "CLF"]:
+            print(f"Current scorer is {scorer}")
+            if scorer == "CLF":
+                combined = [(x, args.server_path) for x in system_out]
+                with ThreadPoolExecutor(args.n_threads) as pool:
+                    scorer_out = list(tqdm(pool.map(wrap_confidence_scorer, combined),
+                                           total=len(combined)))
+                thresholds = [0.1, 0.2, 0.25, 0.3, 0.5]
+            elif scorer == "LM":
+                with ThreadPoolExecutor(args.n_threads) as pool:
+                    scorer_out = list(tqdm(pool.map(wrap_get_lm_scores, system_out),
+                                           total=len(combined)))
+                thresholds = [0]
+            else:
+                scorer_out = system_out
+                thresholds = [None]
+            print("Scores were got")
 
-    # apply thresholds
-    if args.error_types is not None:
-        error_types = args.error_types.split()
-    else:
-        error_types = None
-    for t in thresholds:
-        t_out = []
-        for sent in scorer_out:
-            ann_sent = AnnotatedTokens(AnnotatedText(sent))
-            for ann in ann_sent.iter_annotations():
-                ann.meta['system_type'] = args.system_type
-                et = get_normalized_error_type(ann)
-                if error_types is not None and et not in error_types:
-                    ann_sent.remove(ann)
-                    continue
-                score = float(ann.meta.get('confidence', 1))
-                if t is not None and score < t:
-                    ann_sent.remove(ann)
-            t_out.append(ann_sent.get_annotated_text())
-        # out_file = args.input_file.replace(".txt", f"_{args.system_type}_{args.scorer}_above_{t}.txt")
-        # write_lines(out_file, t_out)
-        if args.m2_file:
-            print(f"\nThreshold level is {t}")
-            tmp_filename = args.input_file.replace(".txt", f"_{args.system_type}_{args.scorer}_above_{t}_tmp.txt")
-            evaluate_from_m2_file(args.m2_file, t_out, tmp_filename)
-        elif args.fp_ratio:
-            cnt_errors = sum([len(AnnotatedText(x).get_annotations()) for x in t_out])
-            print(f"\nThe number of errors are equal {cnt_errors}. "
-                  f"FP rate {round(100*cnt_errors/len(t_out),2)}%")
-        # remove_file(out_file)
+            # apply thresholds
+            if args.error_types is not None:
+                error_types = args.error_types.split()
+            else:
+                error_types = None
+            for t in thresholds:
+                t_out = []
+                for sent in scorer_out:
+                    ann_sent = AnnotatedTokens(AnnotatedText(sent))
+                    for ann in ann_sent.iter_annotations():
+                        ann.meta['system_type'] = args.system_type
+                        et = get_normalized_error_type(ann)
+                        if error_types is not None and et not in error_types:
+                            ann_sent.remove(ann)
+                            continue
+                        score = float(ann.meta.get('confidence', 1))
+                        if t is not None and score < t:
+                            ann_sent.remove(ann)
+                    t_out.append(ann_sent.get_annotated_text())
+                if fp_ratio:
+                    cnt_errors = sum([len(AnnotatedText(x).get_annotations()) for x in t_out])
+                    print(f"\nThe number of errors are equal {cnt_errors}. "
+                          f"FP rate {round(100*cnt_errors/len(t_out),2)}%")
+                else:
+                    print(f"\nThreshold level is {t}")
+                    tmp_filename = input_file.replace(".m2", f"_{args.system_type}_{scorer}_above_{t}_tmp.txt")
+                    evaluate_from_m2_file(input_file, t_out, tmp_filename)
 
 
 if __name__ == "__main__":
     # read parameters
     parser = argparse.ArgumentParser()
-    parser.add_argument('input_file',
-                        help='Path to the input source file',
-                        )
-    parser.add_argument('--m2_file',
-                        help='Path to the input source file',
+    parser.add_argument('input_dir',
+                        help='Path to the directory with m2 files',
                         )
     parser.add_argument('--server_path',
                         help='Path to the server',
@@ -147,10 +159,6 @@ if __name__ == "__main__":
     parser.add_argument('--system_type',
                         help='Specify which system you want to try',
                         choices=['OPC', 'OPC-filtered', 'UPC', None],
-                        default=None)
-    parser.add_argument('--scorer',
-                        help='Specify which scorer you want to use',
-                        choices=['CLF', 'LM', None],
                         default=None)
     parser.add_argument('--error_types',
                         help='Set if you want to filter errors by types.',
