@@ -1,9 +1,18 @@
 
+Gandalf
+=======
+
+Gandalf is LM-based classifier for scoring confidence of GEC system corrections.
+It tries to satisfy the following three properties:
+- Being wise and choosing the best correction when more than one is available
+- Should not pass any FPs to clients
+- Magically improve the overall quality of Grammarly GEC
+
 
 Scorer
 =======
 
-`scorer` is a module which builds eval sets, gets output from different systems,
+`scorer` builds eval sets, gets output from different systems,
 combines systems outputs and evaluates them.
 
 *Extract eval sets*. 
@@ -37,9 +46,3 @@ The list of available strategies:
 Scorer uses m2 scorer for evaluating systems output. 
 Scorer uses the following version of m2: Release 3.2 Revision: 22 April 2014 
 and it is run locally.
-
-*Results for Determiner category*
-Results are available [here](https://docs.google.com/spreadsheets/d/19k78-pycFo31FBLi4eaBHWp7iDc7M5vHAr9KDV7yEeE/edit#gid=0)
-Raw data available on kladovka: `/kladovka/projects/ensemble`
-
-

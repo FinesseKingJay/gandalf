@@ -87,62 +87,74 @@ def main(args):
             sentences = get_lines_from_m2_file(input_file)
 
         # run through system
-        if args.system_type is not None:
-            combined = [(x, args.system_type) for x in sentences]
+        if args.system_type == "OPC":
+            s_types = ["OPC", "OPC-filtered"]
+        elif args.system_type == "UPC":
+            s_types = ["UPC"]
+        else:
+            raise Exception("Unknown system type")
+        for system_type in s_types:
+            print(f"{system_type} is evaluating")
+            combined = [(x, system_type) for x in sentences]
             with ThreadPoolExecutor(args.n_threads) as pool:
                 system_out = list(tqdm(pool.map(wrap_check, combined),
                                     total=len(combined)))
             system_out = [x.get_annotated_text() for x in system_out]
-        else:
-            system_out = sentences
-        print("System response was got")
+            print(f"{system_type} system response was got")
 
-        # run system through confidence scorer
-        for scorer in [None, "LM", "CLF"]:
-            print(f"Current scorer is {scorer}")
-            if scorer == "CLF":
-                combined = [(x, args.server_path) for x in system_out]
-                with ThreadPoolExecutor(args.n_threads) as pool:
-                    scorer_out = list(tqdm(pool.map(wrap_confidence_scorer, combined),
-                                           total=len(combined)))
-                thresholds = [0.1, 0.2, 0.25, 0.3, 0.5]
-            elif scorer == "LM":
-                with ThreadPoolExecutor(args.n_threads) as pool:
-                    scorer_out = list(tqdm(pool.map(wrap_get_lm_scores, system_out),
-                                           total=len(combined)))
-                thresholds = [0]
+            # run system through confidence scorer
+            if system_type.endswith("filtered"):
+                scorer_list = [None]
             else:
-                scorer_out = system_out
-                thresholds = [None]
-            print("Scores were got")
-
-            # apply thresholds
-            if args.error_types is not None:
-                error_types = args.error_types.split()
-            else:
-                error_types = None
-            for t in thresholds:
-                t_out = []
-                for sent in scorer_out:
-                    ann_sent = AnnotatedTokens(AnnotatedText(sent))
-                    for ann in ann_sent.iter_annotations():
-                        ann.meta['system_type'] = args.system_type
-                        et = get_normalized_error_type(ann)
-                        if error_types is not None and et not in error_types:
-                            ann_sent.remove(ann)
-                            continue
-                        score = float(ann.meta.get('confidence', 1))
-                        if t is not None and score < t:
-                            ann_sent.remove(ann)
-                    t_out.append(ann_sent.get_annotated_text())
-                if fp_ratio:
-                    cnt_errors = sum([len(AnnotatedText(x).get_annotations()) for x in t_out])
-                    print(f"\nThe number of errors are equal {cnt_errors}. "
-                          f"FP rate {round(100*cnt_errors/len(t_out),2)}%")
+                scorer_list = [None, "LM", "CLF"]
+                # scorer_list = [None, "CLF"]
+            for scorer in scorer_list:
+                print(f"Current scorer is {scorer}")
+                if scorer == "CLF":
+                    combined = [(x, args.server_path) for x in system_out]
+                    with ThreadPoolExecutor(args.n_threads) as pool:
+                        scorer_out = list(tqdm(pool.map(wrap_confidence_scorer, combined),
+                                           total=len(combined)))
+                    # thresholds = [0.1, 0.2, 0.25, 0.3, 0.5]
+                    thresholds = [0.1, 0.2, 0.25, 0.3, 0.35, 0.36, 0.38, 0.4, 0.45, 0.5]
+                elif scorer == "LM":
+                    with ThreadPoolExecutor(args.n_threads) as pool:
+                        scorer_out = list(tqdm(pool.map(wrap_get_lm_scores, system_out),
+                                               total=len(combined)))
+                    thresholds = [0]
                 else:
-                    print(f"\nThreshold level is {t}")
-                    tmp_filename = input_file.replace(".m2", f"_{args.system_type}_{scorer}_above_{t}_tmp.txt")
-                    evaluate_from_m2_file(input_file, t_out, tmp_filename)
+                    scorer_out = system_out
+                    thresholds = [None]
+                print("Scores were got")
+
+                # apply thresholds
+                if args.error_types is not None:
+                    error_types = args.error_types.split()
+                else:
+                    error_types = None
+                for t in thresholds:
+                    print(f"The current threshold is {t}")
+                    t_out = []
+                    for sent in scorer_out:
+                        ann_sent = AnnotatedTokens(AnnotatedText(sent))
+                        for ann in ann_sent.iter_annotations():
+                            ann.meta['system_type'] = system_type
+                            et = get_normalized_error_type(ann)
+                            if error_types is not None and et not in error_types:
+                                ann_sent.remove(ann)
+                                continue
+                            score = float(ann.meta.get('confidence', 1))
+                            if t is not None and score < t:
+                                ann_sent.remove(ann)
+                        t_out.append(ann_sent.get_annotated_text())
+                    if fp_ratio:
+                        cnt_errors = sum([len(AnnotatedText(x).get_annotations()) for x in t_out])
+                        print(f"\nThe number of errors are equal {cnt_errors}. "
+                              f"FP rate {round(100*cnt_errors/len(t_out),2)}%")
+                    else:
+                        print(f"\nThreshold level is {t}")
+                        tmp_filename = input_file.replace(".m2", f"_{system_type}_{scorer}_above_{t}_tmp.txt")
+                        evaluate_from_m2_file(input_file, t_out, tmp_filename)
 
 
 if __name__ == "__main__":
@@ -158,7 +170,7 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--system_type',
                         help='Specify which system you want to try',
-                        choices=['OPC', 'OPC-filtered', 'UPC', None],
+                        choices=['OPC', 'UPC'],
                         default=None)
     parser.add_argument('--error_types',
                         help='Set if you want to filter errors by types.',

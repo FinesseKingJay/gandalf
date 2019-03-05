@@ -18,14 +18,13 @@ def send_request(request, uri):
 
 def main(args):
     sentences = ["He go at school !",
-                 "Worked in the oil business , started my own .",
-                 ]
+                 "Worked in the oil business , started my own ."]
     # get opc responses
     ann_sents = [opc_check(x, addr="PREPROD", filters=False) for x in sentences]
     batch = [x.get_annotated_text() for x in ann_sents]
     print("Got output from OPC")
 
-    # get confidenece scores
+    # get confidence scores
     results = send_request(batch, args.server_path)
     for sent, rez in zip(batch, results):
         print(sent)
